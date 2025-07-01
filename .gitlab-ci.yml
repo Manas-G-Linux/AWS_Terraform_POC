@@ -1,0 +1,48 @@
+# Assuming below have been set in Gitlab settings
+# AWS_ACCESS_KEY_ID	> Variable	> Used by Terraform & Ansible
+# AWS_SECRET_ACCESS_KEY	> Variable	> Used by Terraform & Ansible
+# SSH_PRIVATE_KEY	> File	> The PEM key for EC2 SSH access
+# ANSIBLE_HOST	> Variable	> Public DNS or IP of EC2
+
+stages:
+  - terraform
+  - ansible
+
+variables:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  AWS_DEFAULT_REGION: "us-east-1"
+
+before_script:
+  - apk add --no-cache curl unzip python3 py3-pip openssh ansible
+  - pip3 install --upgrade pip
+  - pip3 install boto3 botocore
+
+terraform_init:
+  stage: terraform
+  script:
+    - cd terraform
+    - terraform init
+  only:
+    - main
+
+terraform_plan_apply:
+  stage: terraform
+  script:
+    - cd terraform
+    - terraform plan -out=tfplan
+    - terraform apply -auto-approve tfplan
+  only:
+    - main
+
+ansible_configure:
+  stage: ansible
+  script:
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$ANSIBLE_HOST" >> ~/.ssh/known_hosts
+    - cd ansible
+    - ansible-playbook -i inventory.ini playbook.yaml --private-key ~/.ssh/id_rsa
+  only:
+    - main
